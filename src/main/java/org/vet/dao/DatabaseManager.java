@@ -1,75 +1,86 @@
 package org.vet.dao;
 
+import jakarta.persistence.*;
 import org.vet.model.Animal;
 import org.vet.model.Proprietar;
 
-import java.sql.*;
-import java.util.ArrayList;
 import java.util.List;
 
 public class DatabaseManager {
-    private static final String URL = "jdbc:sqlite:vet.bd";
+    private EntityManagerFactory emf = Persistence.createEntityManagerFactory("VetPU");
 
-    private Connection connect() throws SQLException {
-        return DriverManager.getConnection(URL);
+    public List<Proprietar> getAllProprietari() {
+        EntityManager em = emf.createEntityManager();
+        try {
+            return em.createQuery("SELECT p FROM Proprietar p", Proprietar.class).getResultList();
+        } finally {
+            em.close();
+        }
     }
-    public List<Proprietar> getAllProprietari() throws SQLException {
-        List<Proprietar> lista = new ArrayList<>();
-        String sql = "SELECT id, nume, telefon FROM Proprietari";
-        try (Connection conn = connect();
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
-            while (rs.next()) {
-                lista.add(new Proprietar(rs.getInt("id"), rs.getString("nume"), rs.getString("telefon")));
+
+    public List<Animal> getAnimaleByProprietar(int proprietarId) {
+        EntityManager em = emf.createEntityManager();
+        try {
+            return em.createQuery("SELECT a FROM Animal a WHERE a.proprietar.id = :pId", Animal.class)
+                    .setParameter("pId", proprietarId)
+                    .getResultList();
+        } finally {
+            em.close();
+        }
+    }
+
+    public void addAnimal(String nume, String specie, int varsta, int proprietarId) {
+        EntityManager em = emf.createEntityManager();
+        try {
+            em.getTransaction().begin();
+            Proprietar proprietar = em.find(Proprietar.class, proprietarId);
+            if (proprietar != null) {
+                Animal animalNou = new Animal(nume, specie, varsta);
+                animalNou.setProprietar(proprietar);
+                em.persist(animalNou);
             }
+            em.getTransaction().commit();
+        } catch (Exception e) {
+            if (em.getTransaction().isActive()) em.getTransaction().rollback();
+            e.printStackTrace();
+        } finally {
+            em.close();
         }
-        return lista;
     }
 
-    public List<Animal> getAnimaleByProprietar(int proprietarId) throws SQLException {
-        List<Animal> lista = new ArrayList<>();
-        String sql = "SELECT id, nume, specie, varsta FROM Animale WHERE proprietar_id = ?";
-        try (Connection conn = connect();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setInt(1, proprietarId);
-            ResultSet rs = pstmt.executeQuery();
-            while (rs.next()) {
-                lista.add(new Animal(rs.getInt("id"), rs.getString("nume"), rs.getString("specie"), rs.getInt("varsta"), proprietarId));
+    public void updateAnimal(int id, String nume, String specie, int varsta) {
+        EntityManager em = emf.createEntityManager();
+        try {
+            em.getTransaction().begin();
+            Animal animal = em.find(Animal.class, id);
+            if (animal != null) {
+                animal.setNume(nume);
+                animal.setSpecie(specie);
+                animal.setVarsta(varsta);
             }
-        }
-        return lista;
-    }
-
-    public void addAnimal(String nume, String specie, int varsta, int proprietarId) throws SQLException {
-        String sql = "INSERT INTO Animale (nume, specie, varsta, proprietar_id) VALUES (?, ?, ?, ?)";
-        try (Connection conn = connect();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setString(1, nume);
-            pstmt.setString(2, specie);
-            pstmt.setInt(3, varsta);
-            pstmt.setInt(4, proprietarId);
-            pstmt.executeUpdate();
+            em.getTransaction().commit();
+        } catch (Exception e) {
+            if (em.getTransaction().isActive()) em.getTransaction().rollback();
+            e.printStackTrace();
+        } finally {
+            em.close();
         }
     }
 
-    public void updateAnimal(int id, String nume, String specie, int varsta) throws SQLException {
-        String sql = "UPDATE Animale SET nume = ?, specie = ?, varsta = ? WHERE id = ?";
-        try (Connection conn = connect();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setString(1, nume);
-            pstmt.setString(2, specie);
-            pstmt.setInt(3, varsta);
-            pstmt.setInt(4, id);
-            pstmt.executeUpdate();
-        }
-    }
-
-    public void deleteAnimal(int id) throws SQLException {
-        String sql = "DELETE FROM Animale WHERE id = ?";
-        try (Connection conn = connect();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setInt(1, id);
-            pstmt.executeUpdate();
+    public void deleteAnimal(int id) {
+        EntityManager em = emf.createEntityManager();
+        try {
+            em.getTransaction().begin();
+            Animal animal = em.find(Animal.class, id);
+            if (animal != null) {
+                em.remove(animal);
+            }
+            em.getTransaction().commit();
+        } catch (Exception e) {
+            if (em.getTransaction().isActive()) em.getTransaction().rollback();
+            e.printStackTrace();
+        } finally {
+            em.close();
         }
     }
 }

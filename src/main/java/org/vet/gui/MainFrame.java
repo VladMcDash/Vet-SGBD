@@ -7,16 +7,14 @@ import org.vet.model.Proprietar;
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
-import java.sql.SQLException;
 import java.util.List;
 
 public class MainFrame extends JFrame {
     private DatabaseManager dbManager;
     private JTable tableProprietari;
-    private JTable tableAnimale;
     private DefaultTableModel modelProprietari;
+    private JTable tableAnimale;
     private DefaultTableModel modelAnimale;
-
     private JTextField txtNumeAnimal, txtSpecieAnimal, txtVarstaAnimal;
     private int selectedProprietarId = -1;
     private int selectedAnimalId = -1;
@@ -24,7 +22,7 @@ public class MainFrame extends JFrame {
     public MainFrame() {
         dbManager = new DatabaseManager();
         setTitle("Clinica Veterinara");
-        setSize(800, 600);
+        setSize(900, 600);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
 
@@ -39,9 +37,8 @@ public class MainFrame extends JFrame {
 
         tableProprietari.getSelectionModel().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting() && tableProprietari.getSelectedRow() != -1) {
-                Object val = modelProprietari.getValueAt(tableProprietari.getSelectedRow(), 0);
-                selectedProprietarId = Integer.parseInt(val.toString());
-
+                int row = tableProprietari.getSelectedRow();
+                selectedProprietarId = (int) modelProprietari.getValueAt(row, 0);
                 loadAnimale(selectedProprietarId);
                 clearForm();
             }
@@ -54,20 +51,19 @@ public class MainFrame extends JFrame {
         tableAnimale.getSelectionModel().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting() && tableAnimale.getSelectedRow() != -1) {
                 int row = tableAnimale.getSelectedRow();
-
-                Object valId = modelAnimale.getValueAt(row, 0);
-                selectedAnimalId = Integer.parseInt(valId.toString());
-
+                selectedAnimalId = (int) modelAnimale.getValueAt(row, 0);
                 txtNumeAnimal.setText((String) modelAnimale.getValueAt(row, 1));
                 txtSpecieAnimal.setText((String) modelAnimale.getValueAt(row, 2));
                 txtVarstaAnimal.setText(modelAnimale.getValueAt(row, 3).toString());
             }
         });
 
-        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, new JScrollPane(tableProprietari), new JScrollPane(tableAnimale));
-        splitPane.setDividerLocation(300);
+        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
+                new JScrollPane(tableProprietari), new JScrollPane(tableAnimale));
+        splitPane.setDividerLocation(350);
         add(splitPane, BorderLayout.CENTER);
 
+        JPanel southPanel = new JPanel(new BorderLayout());
         JPanel formPanel = new JPanel(new FlowLayout());
         txtNumeAnimal = new JTextField(10);
         txtSpecieAnimal = new JTextField(10);
@@ -77,19 +73,27 @@ public class MainFrame extends JFrame {
         formPanel.add(new JLabel("Specie:")); formPanel.add(txtSpecieAnimal);
         formPanel.add(new JLabel("Varsta:")); formPanel.add(txtVarstaAnimal);
 
-        JButton btnAdd = new JButton("Adauga");
+        JPanel buttonPanel = new JPanel(new FlowLayout());
+        JButton btnAdd = new JButton("Adauga Animal");
         JButton btnUpdate = new JButton("Actualizeaza");
-        JButton btnDelete = new JButton("Sterge");
-
+        JButton btnDelete = new JButton("Sterge Animal");
+        JButton btnRefresh = new JButton("Refresh");
         btnAdd.addActionListener(e -> addAnimal());
         btnUpdate.addActionListener(e -> updateAnimal());
         btnDelete.addActionListener(e -> deleteAnimal());
+        btnRefresh.addActionListener(e -> {
+            loadProprietari();
+            modelAnimale.setRowCount(0);
+        });
 
-        formPanel.add(btnAdd);
-        formPanel.add(btnUpdate);
-        formPanel.add(btnDelete);
+        buttonPanel.add(btnAdd);
+        buttonPanel.add(btnUpdate);
+        buttonPanel.add(btnDelete);
+        buttonPanel.add(btnRefresh);
 
-        add(formPanel, BorderLayout.SOUTH);
+        southPanel.add(formPanel, BorderLayout.NORTH);
+        southPanel.add(buttonPanel, BorderLayout.SOUTH);
+        add(southPanel, BorderLayout.SOUTH);
     }
 
     private void loadProprietari() {
@@ -99,8 +103,8 @@ public class MainFrame extends JFrame {
             for (Proprietar p : list) {
                 modelProprietari.addRow(new Object[]{p.getId(), p.getNume(), p.getTelefon()});
             }
-        } catch (SQLException ex) {
-            JOptionPane.showMessageDialog(this, "Eroare la inczrcarea proprietarilor: " + ex.getMessage(), "Eroare BD", JOptionPane.ERROR_MESSAGE);
+        } catch (Exception ex) {
+            showError("Eroare la incarcarea proprietarilor: " + ex.getMessage());
         }
     }
 
@@ -111,69 +115,81 @@ public class MainFrame extends JFrame {
             for (Animal a : list) {
                 modelAnimale.addRow(new Object[]{a.getId(), a.getNume(), a.getSpecie(), a.getVarsta()});
             }
-        } catch (SQLException ex) {
-            JOptionPane.showMessageDialog(this, "Eroare la incarcarea animalelor: " + ex.getMessage(), "Eroare", JOptionPane.ERROR_MESSAGE);
+        } catch (Exception ex) {
+            showError("Eroare la incarcarea animalelor: " + ex.getMessage());
         }
     }
-
     private void addAnimal() {
         if (selectedProprietarId == -1) {
-            JOptionPane.showMessageDialog(this, "Selectează un proprietar");
+            JOptionPane.showMessageDialog(this, "Selectati un proprietar din lista din stanga!");
             return;
         }
         if (!validateForm()) return;
 
         try {
-            dbManager.addAnimal(txtNumeAnimal.getText(), txtSpecieAnimal.getText(), Integer.parseInt(txtVarstaAnimal.getText()), selectedProprietarId);
+            dbManager.addAnimal(txtNumeAnimal.getText(),
+                    txtSpecieAnimal.getText(),
+                    Integer.parseInt(txtVarstaAnimal.getText()),
+                    selectedProprietarId);
             loadAnimale(selectedProprietarId);
             clearForm();
-        } catch (SQLException ex) {
-            JOptionPane.showMessageDialog(this, "Eroare la adaugare: " + ex.getMessage(), "Eroare", JOptionPane.ERROR_MESSAGE);
+        } catch (Exception ex) {
+            showError("Eroare la adaugare: " + ex.getMessage());
         }
     }
 
     private void updateAnimal() {
         if (selectedAnimalId == -1) {
-            JOptionPane.showMessageDialog(this, "Selecteaza un animal pentru edit");
+            JOptionPane.showMessageDialog(this, "Selectati un animal din tabel pentru a-l edita!");
             return;
         }
         if (!validateForm()) return;
 
         try {
-            dbManager.updateAnimal(selectedAnimalId, txtNumeAnimal.getText(), txtSpecieAnimal.getText(), Integer.parseInt(txtVarstaAnimal.getText()));
+            dbManager.updateAnimal(selectedAnimalId,
+                    txtNumeAnimal.getText(),
+                    txtSpecieAnimal.getText(),
+                    Integer.parseInt(txtVarstaAnimal.getText()));
             loadAnimale(selectedProprietarId);
-        } catch (SQLException ex) {
-            JOptionPane.showMessageDialog(this, "Eroare la actualizare: " + ex.getMessage(), "Eroare", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Datele animalului au fost actualizate.");
+        } catch (Exception ex) {
+            showError("Eroare la actualizare: " + ex.getMessage());
         }
     }
 
     private void deleteAnimal() {
         if (selectedAnimalId == -1) {
-            JOptionPane.showMessageDialog(this, "Selecteaza un animal pentru stergere");
+            JOptionPane.showMessageDialog(this, "Selectati un animal pentru stergere!");
             return;
         }
-        // Dialog de confirmare
-        int confirm = JOptionPane.showConfirmDialog(this, "Sigur dorești sa stergi acest animal?", "Confirmare", JOptionPane.YES_NO_OPTION);
+
+        int confirm = JOptionPane.showConfirmDialog(this,
+                "Sigur doriti sa stergeti acest animal?", "Confirmare Stergere",
+                JOptionPane.YES_NO_OPTION);
+
         if (confirm == JOptionPane.YES_OPTION) {
             try {
                 dbManager.deleteAnimal(selectedAnimalId);
                 loadAnimale(selectedProprietarId);
                 clearForm();
-            } catch (SQLException ex) {
-                JOptionPane.showMessageDialog(this, "Eroare la ștergere: " + ex.getMessage(), "Eroare", JOptionPane.ERROR_MESSAGE);
+            } catch (Exception ex) {
+                showError("Eroare la stergere: " + ex.getMessage());
             }
         }
     }
 
     private boolean validateForm() {
-        if (txtNumeAnimal.getText().trim().isEmpty() || txtSpecieAnimal.getText().trim().isEmpty() || txtVarstaAnimal.getText().trim().isEmpty()) {
+        if (txtNumeAnimal.getText().trim().isEmpty() ||
+                txtSpecieAnimal.getText().trim().isEmpty() ||
+                txtVarstaAnimal.getText().trim().isEmpty()) {
             JOptionPane.showMessageDialog(this, "Toate campurile sunt obligatorii!");
             return false;
         }
         try {
-            Integer.parseInt(txtVarstaAnimal.getText());
+            int varsta = Integer.parseInt(txtVarstaAnimal.getText());
+            if (varsta < 0) throw new NumberFormatException();
         } catch (NumberFormatException e) {
-            JOptionPane.showMessageDialog(this, "Varsta trebuie sa fie un numar valid!");
+            JOptionPane.showMessageDialog(this, "Varsta trebuie sa fie un numar intreg pozitiv!");
             return false;
         }
         return true;
@@ -185,5 +201,9 @@ public class MainFrame extends JFrame {
         txtVarstaAnimal.setText("");
         selectedAnimalId = -1;
         tableAnimale.clearSelection();
+    }
+
+    private void showError(String message) {
+        JOptionPane.showMessageDialog(this, message, "Eroare Sistem", JOptionPane.ERROR_MESSAGE);
     }
 }
