@@ -1,11 +1,15 @@
 package org.vet.model;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.Cache;
+import org.hibernate.annotations.CacheConcurrencyStrategy;
 import java.util.ArrayList;
 import java.util.List;
 
 @Entity
 @Table(name = "proprietari")
+@Cacheable
+@Cache(usage = CacheConcurrencyStrategy.READ_WRITE)
 public class Proprietar {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

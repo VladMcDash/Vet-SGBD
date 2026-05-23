@@ -15,4 +15,7 @@ dependencies {
     implementation 'com.zaxxer:HikariCP:5.1.0'
     implementation 'org.hibernate.orm:hibernate-hikaricp:6.4.4.Final'
     implementation 'ch.qos.logback:logback-classic:1.4.14'
+    implementation 'org.hibernate.orm:hibernate-jcache:6.4.4.Final'
+    implementation 'org.ehcache:ehcache:3.10.8'
+    implementation 'org.liquibase:liquibase-core:4.24.0'
 }

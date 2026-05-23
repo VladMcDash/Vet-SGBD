@@ -11,18 +11,22 @@ import java.util.List;
 
 public class MainFrame extends JFrame {
     private DatabaseManager dbManager;
-    private JTable tableProprietari;
-    private DefaultTableModel modelProprietari;
-    private JTable tableAnimale;
-    private DefaultTableModel modelAnimale;
+    private JTable tableProprietari, tableAnimale;
+    private DefaultTableModel modelProprietari, modelAnimale;
     private JTextField txtNumeAnimal, txtSpecieAnimal, txtVarstaAnimal;
+
+    // Variabile Paginare
     private int selectedProprietarId = -1;
-    private int selectedAnimalId = -1;
+    private int currentPage = 0;
+    private int pageSize = 10;
+    private long totalRecords = 0;
+    private JLabel lblPageInfo;
+    private JComboBox<Integer> comboPageSize;
 
     public MainFrame() {
         dbManager = new DatabaseManager();
-        setTitle("Clinica Veterinara");
-        setSize(900, 600);
+        setTitle("Clinica Veterinara (Paginare & Bulk Updates)");
+        setSize(1000, 650);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
 
@@ -31,179 +35,102 @@ public class MainFrame extends JFrame {
     }
 
     private void initComponents() {
-        modelProprietari = new DefaultTableModel(new String[]{"ID", "Nume Proprietar", "Telefon"}, 0);
+        modelProprietari = new DefaultTableModel(new String[]{"ID", "Proprietar", "Telefon"}, 0);
         tableProprietari = new JTable(modelProprietari);
         tableProprietari.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-
         tableProprietari.getSelectionModel().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting() && tableProprietari.getSelectedRow() != -1) {
-                int row = tableProprietari.getSelectedRow();
-                selectedProprietarId = (int) modelProprietari.getValueAt(row, 0);
-                loadAnimale(selectedProprietarId);
-                clearForm();
+                selectedProprietarId = (int) modelProprietari.getValueAt(tableProprietari.getSelectedRow(), 0);
+                currentPage = 0; // Resetam pagina cand schimbam stapanul
+                loadAnimalePaginat();
             }
         });
 
         modelAnimale = new DefaultTableModel(new String[]{"ID", "Nume", "Specie", "Varsta"}, 0);
         tableAnimale = new JTable(modelAnimale);
-        tableAnimale.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-
-        tableAnimale.getSelectionModel().addListSelectionListener(e -> {
-            if (!e.getValueIsAdjusting() && tableAnimale.getSelectedRow() != -1) {
-                int row = tableAnimale.getSelectedRow();
-                selectedAnimalId = (int) modelAnimale.getValueAt(row, 0);
-                txtNumeAnimal.setText((String) modelAnimale.getValueAt(row, 1));
-                txtSpecieAnimal.setText((String) modelAnimale.getValueAt(row, 2));
-                txtVarstaAnimal.setText(modelAnimale.getValueAt(row, 3).toString());
-            }
-        });
 
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
-                new JScrollPane(tableProprietari), new JScrollPane(tableAnimale));
-        splitPane.setDividerLocation(350);
+                new JScrollPane(tableProprietari), createAnimalPanelWithPagination());
+        splitPane.setDividerLocation(300);
         add(splitPane, BorderLayout.CENTER);
 
-        JPanel southPanel = new JPanel(new BorderLayout());
+        // FORMULAR ADAUGARE
         JPanel formPanel = new JPanel(new FlowLayout());
         txtNumeAnimal = new JTextField(10);
         txtSpecieAnimal = new JTextField(10);
         txtVarstaAnimal = new JTextField(5);
-
         formPanel.add(new JLabel("Nume:")); formPanel.add(txtNumeAnimal);
         formPanel.add(new JLabel("Specie:")); formPanel.add(txtSpecieAnimal);
         formPanel.add(new JLabel("Varsta:")); formPanel.add(txtVarstaAnimal);
 
-        JPanel buttonPanel = new JPanel(new FlowLayout());
         JButton btnAdd = new JButton("Adauga Animal");
-        JButton btnUpdate = new JButton("Actualizeaza");
-        JButton btnDelete = new JButton("Sterge Animal");
-        JButton btnRefresh = new JButton("Refresh");
-        btnAdd.addActionListener(e -> addAnimal());
-        btnUpdate.addActionListener(e -> updateAnimal());
-        btnDelete.addActionListener(e -> deleteAnimal());
-        btnRefresh.addActionListener(e -> {
-            loadProprietari();
-            modelAnimale.setRowCount(0);
+        btnAdd.addActionListener(e -> {
+            dbManager.addAnimal(txtNumeAnimal.getText(), txtSpecieAnimal.getText(), Integer.parseInt(txtVarstaAnimal.getText()), selectedProprietarId);
+            loadAnimalePaginat();
         });
 
-        buttonPanel.add(btnAdd);
-        buttonPanel.add(btnUpdate);
-        buttonPanel.add(btnDelete);
-        buttonPanel.add(btnRefresh);
+        // BUTON OPERATIE IN MASA (LAB 4)
+        JButton btnBulk = new JButton("+1 An (Toate)");
+        btnBulk.setBackground(Color.ORANGE);
+        btnBulk.addActionListener(e -> {
+            if(selectedProprietarId != -1) {
+                int updated = dbManager.incrementVarstaToateAnimalele(selectedProprietarId);
+                JOptionPane.showMessageDialog(this, "Actualizare in masa reusita!\nAnimale modificate: " + updated);
+                loadAnimalePaginat();
+            }
+        });
 
-        southPanel.add(formPanel, BorderLayout.NORTH);
-        southPanel.add(buttonPanel, BorderLayout.SOUTH);
-        add(southPanel, BorderLayout.SOUTH);
+        formPanel.add(btnAdd);
+        formPanel.add(btnBulk);
+        add(formPanel, BorderLayout.SOUTH);
+    }
+
+    private JPanel createAnimalPanelWithPagination() {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.add(new JScrollPane(tableAnimale), BorderLayout.CENTER);
+
+        // CONTROALE PAGINARE (Lab 4)
+        JPanel paginationPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        JButton btnPrev = new JButton("< Inapoi");
+        JButton btnNext = new JButton("Inainte >");
+        lblPageInfo = new JLabel("Pagina 1 (0 rezultate)");
+        comboPageSize = new JComboBox<>(new Integer[]{10, 25, 50, 100});
+
+        btnPrev.addActionListener(e -> { if(currentPage > 0) { currentPage--; loadAnimalePaginat(); } });
+        btnNext.addActionListener(e -> { if((currentPage + 1) * pageSize < totalRecords) { currentPage++; loadAnimalePaginat(); } });
+        comboPageSize.addActionListener(e -> {
+            pageSize = (int) comboPageSize.getSelectedItem();
+            currentPage = 0;
+            loadAnimalePaginat();
+        });
+
+        paginationPanel.add(new JLabel("Per pagina:"));
+        paginationPanel.add(comboPageSize);
+        paginationPanel.add(btnPrev);
+        paginationPanel.add(lblPageInfo);
+        paginationPanel.add(btnNext);
+
+        panel.add(paginationPanel, BorderLayout.SOUTH);
+        return panel;
     }
 
     private void loadProprietari() {
-        modelProprietari.setRowCount(0);
-        try {
-            List<Proprietar> list = dbManager.getAllProprietari();
-            for (Proprietar p : list) {
-                modelProprietari.addRow(new Object[]{p.getId(), p.getNume(), p.getTelefon()});
-            }
-        } catch (Exception ex) {
-            showError("Eroare la incarcarea proprietarilor: " + ex.getMessage());
-        }
+        List<Proprietar> list = dbManager.getAllProprietari();
+        for (Proprietar p : list) modelProprietari.addRow(new Object[]{p.getId(), p.getNume(), p.getTelefon()});
     }
 
-    private void loadAnimale(int proprietarId) {
+    private void loadAnimalePaginat() {
+        if (selectedProprietarId == -1) return;
         modelAnimale.setRowCount(0);
-        try {
-            List<Animal> list = dbManager.getAnimaleByProprietar(proprietarId);
-            for (Animal a : list) {
-                modelAnimale.addRow(new Object[]{a.getId(), a.getNume(), a.getSpecie(), a.getVarsta()});
-            }
-        } catch (Exception ex) {
-            showError("Eroare la incarcarea animalelor: " + ex.getMessage());
-        }
-    }
-    private void addAnimal() {
-        if (selectedProprietarId == -1) {
-            JOptionPane.showMessageDialog(this, "Selectati un proprietar din lista din stanga!");
-            return;
-        }
-        if (!validateForm()) return;
 
-        try {
-            dbManager.addAnimal(txtNumeAnimal.getText(),
-                    txtSpecieAnimal.getText(),
-                    Integer.parseInt(txtVarstaAnimal.getText()),
-                    selectedProprietarId);
-            loadAnimale(selectedProprietarId);
-            clearForm();
-        } catch (Exception ex) {
-            showError("Eroare la adaugare: " + ex.getMessage());
-        }
-    }
+        totalRecords = dbManager.countAnimale(selectedProprietarId);
+        List<Animal> list = dbManager.getAnimalePageOffset(selectedProprietarId, currentPage, pageSize);
 
-    private void updateAnimal() {
-        if (selectedAnimalId == -1) {
-            JOptionPane.showMessageDialog(this, "Selectati un animal din tabel pentru a-l edita!");
-            return;
-        }
-        if (!validateForm()) return;
-
-        try {
-            dbManager.updateAnimal(selectedAnimalId,
-                    txtNumeAnimal.getText(),
-                    txtSpecieAnimal.getText(),
-                    Integer.parseInt(txtVarstaAnimal.getText()));
-            loadAnimale(selectedProprietarId);
-            JOptionPane.showMessageDialog(this, "Datele animalului au fost actualizate.");
-        } catch (Exception ex) {
-            showError("Eroare la actualizare: " + ex.getMessage());
-        }
-    }
-
-    private void deleteAnimal() {
-        if (selectedAnimalId == -1) {
-            JOptionPane.showMessageDialog(this, "Selectati un animal pentru stergere!");
-            return;
+        for (Animal a : list) {
+            modelAnimale.addRow(new Object[]{a.getId(), a.getNume(), a.getSpecie(), a.getVarsta()});
         }
 
-        int confirm = JOptionPane.showConfirmDialog(this,
-                "Sigur doriti sa stergeti acest animal?", "Confirmare Stergere",
-                JOptionPane.YES_NO_OPTION);
-
-        if (confirm == JOptionPane.YES_OPTION) {
-            try {
-                dbManager.deleteAnimal(selectedAnimalId);
-                loadAnimale(selectedProprietarId);
-                clearForm();
-            } catch (Exception ex) {
-                showError("Eroare la stergere: " + ex.getMessage());
-            }
-        }
-    }
-
-    private boolean validateForm() {
-        if (txtNumeAnimal.getText().trim().isEmpty() ||
-                txtSpecieAnimal.getText().trim().isEmpty() ||
-                txtVarstaAnimal.getText().trim().isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Toate campurile sunt obligatorii!");
-            return false;
-        }
-        try {
-            int varsta = Integer.parseInt(txtVarstaAnimal.getText());
-            if (varsta < 0) throw new NumberFormatException();
-        } catch (NumberFormatException e) {
-            JOptionPane.showMessageDialog(this, "Varsta trebuie sa fie un numar intreg pozitiv!");
-            return false;
-        }
-        return true;
-    }
-
-    private void clearForm() {
-        txtNumeAnimal.setText("");
-        txtSpecieAnimal.setText("");
-        txtVarstaAnimal.setText("");
-        selectedAnimalId = -1;
-        tableAnimale.clearSelection();
-    }
-
-    private void showError(String message) {
-        JOptionPane.showMessageDialog(this, message, "Eroare Sistem", JOptionPane.ERROR_MESSAGE);
+        int totalPages = (int) Math.ceil((double) totalRecords / pageSize);
+        lblPageInfo.setText("Pagina " + (currentPage + 1) + " din " + Math.max(1, totalPages));
     }
 }

@@ -13,74 +13,91 @@ public class DatabaseManager {
         EntityManager em = emf.createEntityManager();
         try {
             return em.createQuery("SELECT p FROM Proprietar p", Proprietar.class).getResultList();
-        } finally {
-            em.close();
-        }
+        } finally { em.close(); }
     }
 
-    public List<Animal> getAnimaleByProprietar(int proprietarId) {
+    public Proprietar getProprietarById(int id) {
         EntityManager em = emf.createEntityManager();
         try {
-            return em.createQuery("SELECT a FROM Animal a WHERE a.proprietar.id = :pId", Animal.class)
-                    .setParameter("pId", proprietarId)
-                    .getResultList();
-        } finally {
-            em.close();
-        }
+            return em.find(Proprietar.class, id); // Va folosi Cache-ul L2
+        } finally { em.close(); }
     }
 
     public void addAnimal(String nume, String specie, int varsta, int proprietarId) {
         EntityManager em = emf.createEntityManager();
         try {
             em.getTransaction().begin();
-            Proprietar proprietar = em.find(Proprietar.class, proprietarId);
-            if (proprietar != null) {
-                Animal animalNou = new Animal(nume, specie, varsta);
-                animalNou.setProprietar(proprietar);
-                em.persist(animalNou);
+            Proprietar p = em.find(Proprietar.class, proprietarId);
+            if (p != null) {
+                Animal a = new Animal(nume, specie, varsta);
+                a.setProprietar(p);
+                em.persist(a);
             }
             em.getTransaction().commit();
         } catch (Exception e) {
             if (em.getTransaction().isActive()) em.getTransaction().rollback();
-            e.printStackTrace();
+        } finally { em.close(); }
+    }
+
+    //PAGINARE (OFFSET)
+    public List<Animal> getAnimalePageOffset(int proprietarId, int pageNumber, int pageSize) {
+        EntityManager em = emf.createEntityManager();
+        try {
+            int offset = pageNumber * pageSize;
+            return em.createQuery("SELECT a FROM Animal a WHERE a.proprietar.id = :pId ORDER BY a.id", Animal.class)
+                    .setParameter("pId", proprietarId)
+                    .setFirstResult(offset)
+                    .setMaxResults(pageSize)
+                    .getResultList();
+        } finally { em.close(); }
+    }
+
+    public long countAnimale(int proprietarId) {
+        EntityManager em = emf.createEntityManager();
+        try {
+            return em.createQuery("SELECT COUNT(a) FROM Animal a WHERE a.proprietar.id = :pId", Long.class)
+                    .setParameter("pId", proprietarId)
+                    .getSingleResult();
+        } finally { em.close(); }
+    }
+
+    //OPERATII BULK
+    public int incrementVarstaToateAnimalele(int proprietarId) {
+        EntityManager em = emf.createEntityManager();
+        try {
+            em.getTransaction().begin();
+            int rowsUpdated = em.createQuery("UPDATE Animal a SET a.varsta = a.varsta + 1 WHERE a.proprietar.id = :pId")
+                    .setParameter("pId", proprietarId)
+                    .executeUpdate();
+            em.getTransaction().commit();
+            return rowsUpdated;
+        } catch (Exception e) {
+            if (em.getTransaction().isActive()) em.getTransaction().rollback();
+            return 0;
+        } finally { em.close(); }
+    }
+
+    //REZOLVARE N+1
+    public List<Proprietar> getProprietariCuAnimaleNPlus1() {
+        EntityManager em = emf.createEntityManager();
+        try {
+            List<Proprietar> proprietari = em.createQuery("SELECT p FROM Proprietar p", Proprietar.class).getResultList();
+
+            for(Proprietar p : proprietari) {
+                p.getAnimale().size();
+            }
+            return proprietari;
         } finally {
             em.close();
         }
     }
 
-    public void updateAnimal(int id, String nume, String specie, int varsta) {
+    public List<Proprietar> getProprietariCuAnimaleEager() {
         EntityManager em = emf.createEntityManager();
         try {
-            em.getTransaction().begin();
-            Animal animal = em.find(Animal.class, id);
-            if (animal != null) {
-                animal.setNume(nume);
-                animal.setSpecie(specie);
-                animal.setVarsta(varsta);
-            }
-            em.getTransaction().commit();
-        } catch (Exception e) {
-            if (em.getTransaction().isActive()) em.getTransaction().rollback();
-            e.printStackTrace();
-        } finally {
-            em.close();
-        }
+            return em.createQuery("SELECT DISTINCT p FROM Proprietar p LEFT JOIN FETCH p.animale", Proprietar.class).getResultList();
+        } finally { em.close(); }
     }
 
-    public void deleteAnimal(int id) {
-        EntityManager em = emf.createEntityManager();
-        try {
-            em.getTransaction().begin();
-            Animal animal = em.find(Animal.class, id);
-            if (animal != null) {
-                em.remove(animal);
-            }
-            em.getTransaction().commit();
-        } catch (Exception e) {
-            if (em.getTransaction().isActive()) em.getTransaction().rollback();
-            e.printStackTrace();
-        } finally {
-            em.close();
-        }
-    }
+    public EntityManagerFactory getEmf() { return emf; }
 }

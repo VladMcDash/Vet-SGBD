@@ -3,7 +3,10 @@ package org.vet.model;
 import jakarta.persistence.*;
 
 @Entity
-@Table(name = "animale")
+@Table(name = "animale", indexes = {
+        @Index(name = "idx_animale_proprietar", columnList = "proprietar_id"),
+        @Index(name = "idx_animale_specie_varsta", columnList = "specie, varsta")
+})
 public class Animal {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
